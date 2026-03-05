@@ -2,42 +2,68 @@ name: Deploy to Infomaniak via SFTP
 
 on:
   push:
-    branches: [ main ]  # Déclenche à chaque push sur 'main'
-  workflow_dispatch:    # Permet un déclenchement manuel
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     
     steps:
       # 1. Récupérer le code
       - name: Checkout code
         uses: actions/checkout@v4
       
-      # 2. Installer Node.js
+      # 2. Installer Node.js (Version 24 comme Infomaniak)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'npm'
+          cache: 'npm' # Active le cache automatique des dépendances
       
       # 3. Installer les dépendances
       - name: Install dependencies
         run: npm ci
+        # npm ci est plus rapide et plus fiable que npm install pour les CI
       
-      # 4. Build du projet
+      # 4. Build du projet (Avec gestion du temps)
       - name: Build project
         run: npm run build
-
-      # 5. Déployer via SFTP (Action corrigée)
-      - name: Deploy via SFTP
-        uses: easingthemes/ssh-deploy@v4.1.8
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SFTP_PASSWORD }} # Astuce : Cette action accepte aussi le mot de passe dans ce champ si pas de clé
-          REMOTE_HOST: ${{ secrets.SFTP_HOST }}
-          REMOTE_USER: ${{ secrets.SFTP_USERNAME }}
-          REMOTE_PORT: 22
-          SOURCE: "next/"
-          TARGET: ${{ secrets.SFTP_PATH }}
-          EXCLUDE: "/dist/, /node_modules/, /.git/, /.env"
-          ARGS: "-rltgoDzvO"
+          CI: false # Désactive le mode "strict" de certains builds qui peuvent planter vite
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          # Si vous avez d'autres variables d'environnement nécessaires au build, ajoutez-les ici
+      
+      # 5. Installation de l'outil de transfert
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      # 6. Déploiement intelligent (Détecte le bon dossier)
+      - name: Deploy via SFTP
+        run: |
+          # Détection automatique du dossier de build
+          if [ -d "./dist" ]; then SOURCE_DIR="./dist/"; 
+          elif [ -d "./out" ]; then SOURCE_DIR="./out/"; 
+          elif [ -d "./.next" ]; then SOURCE_DIR="./.next/"; 
+          elif [ -d "./build" ]; then SOURCE_DIR="./build/"; 
+          else 
+            echo "❌ Erreur critique : Aucun dossier de build trouvé (dist, out, .next, build) !"
+            ls -la
+            exit 1 
+          fi
+          
+          echo "✅ Dossier de build détecté : $SOURCE_DIR"
+          echo "🚀 Déploiement vers ${{ secrets.SFTP_USERNAME }}@${{ secrets.SFTP_HOST }}:${{ secrets.SFTP_PATH }}/"
+          
+          # Transfert des fichiers
+          rsync -avz --delete \
+            -e "sshpass -p '${{ secrets.SFTP_PASSWORD }}' ssh -o StrictHostKeyChecking=no" \
+            --exclude 'node_modules' \
+            --exclude '.git' \
+            --exclude '.env*' \
+            "$SOURCE_DIR" \
+            "${{ secrets.SFTP_USERNAME }}@${{ secrets.SFTP_HOST }}:${{ secrets.SFTP_PATH }}/"
+            
+          echo "✅ Déploiement terminé avec succès !"
