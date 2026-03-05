@@ -1,65 +1,10 @@
-name: Deploy to Infomaniak via SFTP
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    
-    steps:
-      # 1. Récupérer le code
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      # 2. Installer Node.js (Version 24)
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-      
-      # 3. Installer les dépendances
-      - name: Install dependencies
-        run: npm ci
-      
-      # 4. Build du projet
-      - name: Build project
-        run: npm run build
-        env:
-          CI: false
-      
-      # 5. Installation de sshpass
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
-
-      # 6. Déploiement DIRECT (Sans création de dossier)
-      - name: Deploy via SFTP
+- name: Push to Infomaniak Git
         run: |
-          # On récupère le chemin depuis vos Secrets GitHub
-          REMOTE_PATH="${{ secrets.SFTP_PATH }}"
+          # Configurer Git
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
           
-          # Ajout automatique du slash final s'il manque
-          if [[ "$REMOTE_PATH" != */ ]]; then
-            REMOTE_PATH="$REMOTE_PATH/"
-          fi
+          REMOTE_URL="ssh://${{ secrets.SFTP_USERNAME }}:${{ secrets.SFTP_PASSWORD }}@${{ secrets.SFTP_HOST }}/home/${{ secrets.SFTP_USERNAME }}/git-depot/originenature.git"
           
-          echo "🔍 Connexion à ${{ secrets.SFTP_HOST }} en tant que ${{ secrets.SFTP_USERNAME }}"
-          echo "📂 Envoi vers : $REMOTE_PATH"
-          echo "📦 Depuis le dossier : ./.next/"
-          
-          # ENVOI DES FICHIERS (rsync)
-          # On suppose que les dossiers /sites/origine-nature.com existent déjà (créés manuellement)
-          rsync -avz --delete \
-            -e "sshpass -p '${{ secrets.SFTP_PASSWORD }}' ssh -o StrictHostKeyChecking=no" \
-            --exclude 'node_modules' \
-            --exclude '.git' \
-            --exclude '.env*' \
-            ./.next/ \
-            "${{ secrets.SFTP_USERNAME }}@${{ secrets.SFTP_HOST }}:$REMOTE_PATH"
-            
-          echo "✅ Déploiement terminé avec succès !"
-          echo "⚠️ N'oubliez pas d'aller cliquer sur 'Restart' dans l'onglet Node.js du Manager Infomaniak."
+          git remote add infomaniak $REMOTE_URL
+          git push -f infomaniak main
