@@ -28,21 +28,16 @@ jobs:
       # 4. Build du projet
       - name: Build project
         run: npm run build
-      
-      # 5. Déployer via SFTP
+
+      # 5. Déployer via SFTP (Action corrigée)
       - name: Deploy via SFTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.SFTP_HOST }}
-          username: ${{ secrets.SFTP_USERNAME }}
-          password: ${{ secrets.SFTP_PASSWORD }}
-          protocol: sftp
-          port: 22
-          local-dir: ./next/
-          server-dir: ${{ secrets.SFTP_PATH }}/
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-            **/.env*
-            **/*.log
+        uses: easingthemes/ssh-deploy@v4.1.8
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SFTP_PASSWORD }} # Astuce : Cette action accepte aussi le mot de passe dans ce champ si pas de clé
+          REMOTE_HOST: ${{ secrets.SFTP_HOST }}
+          REMOTE_USER: ${{ secrets.SFTP_USERNAME }}
+          REMOTE_PORT: 22
+          SOURCE: "next/"
+          TARGET: ${{ secrets.SFTP_PATH }}
+          EXCLUDE: "/dist/, /node_modules/, /.git/, /.env"
+          ARGS: "-rltgoDzvO"
