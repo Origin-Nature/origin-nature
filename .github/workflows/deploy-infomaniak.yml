@@ -13,14 +13,12 @@
           PUB_KEY=$(cat ~/.ssh/id_ed25519.pub)
           
           # 4. Se connecter UNE FOIS avec le mot de passe pour déposer la clé publique
-          # Cela configure l'accès sans mot de passe pour la suite
           echo "🔑 Dépôt de la clé SSH sur Infomaniak..."
-          sshpass -p '${{ secrets.SFTP_PASSWORD }}' ssh -o StrictHostKeyChecking=no ${{ secrets.SFTP_USERNAME }}@${{ secrets.SFTP_HOST }} "
-            mkdir -p ~/.ssh && 
-            echo '$PUB_KEY' >> ~/.ssh/authorized_keys && 
-            chmod 700 ~/.ssh && 
-            chmod 600 ~/.ssh/authorized_keys
-          "
+          
+          # Utilisation de la variable d'environnement pour éviter les problèmes de quotes dans YAML
+          export SSHPASS="${{ secrets.SFTP_PASSWORD }}"
+          
+          sshpass -e ssh -o StrictHostKeyChecking=no ${{ secrets.SFTP_USERNAME }}@${{ secrets.SFTP_HOST }} "mkdir -p ~/.ssh && echo '${PUB_KEY}' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys"
           
           # 5. Configurer Git pour utiliser cette clé
           git config --global core.sshCommand "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no"
