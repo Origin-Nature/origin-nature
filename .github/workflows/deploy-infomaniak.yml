@@ -11,49 +11,34 @@ jobs:
     timeout-minutes: 10
     
     steps:
-      # 1. Récupérer le code (avec tout l'historique git, nécessaire pour push)
+      # 1. Récupérer le code source
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Important pour récupérer tout l'historique
+          fetch-depth: 0 # Nécessaire pour git push
 
-      # 2. Installer Node.js (Version 24)
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-
-      # 3. Installer les dépendances
-      - name: Install dependencies
-        run: npm ci
-
-      # 4. Build du projet
-      - name: Build project
-        run: npm run build
-        env:
-          CI: false
-
-      # 5. Configurer Git et Pousser vers Infomaniak
-      - name: Push to Infomaniak Git
+      # 2. Configurer Git et Pousser vers Infomaniak
+      # C'est TOUT. Infomaniak fera le reste.
+      - name: Push Source Code to Infomaniak
         run: |
           # Configuration de l'utilisateur Git
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions Deploy"
 
-          # Définir les variables depuis les secrets
+          # Variables depuis les secrets
           SSH_USER="${{ secrets.SFTP_USERNAME }}"
           SSH_HOST="${{ secrets.SFTP_HOST }}"
           SSH_PASS="${{ secrets.SFTP_PASSWORD }}"
           
-          # Chemin du dépôt distant sur Infomaniak
+          # URL du dépôt distant (le dossier git-depot/monsite.git créé sur Infomaniak)
           REMOTE_REPO="ssh://${SSH_USER}:${SSH_PASS}@${SSH_HOST}/home/${SSH_USER}/git-depot/originenature.git"
 
           echo "🔄 Ajout du remote Infomaniak..."
           git remote add infomaniak "$REMOTE_REPO"
 
-          echo "🚀 Push de la branche main vers Infomaniak..."
+          echo "🚀 Envoi du CODE SOURCE vers Infomaniak..."
+          echo "🛠️ Le serveur Infomaniak va maintenant lancer : npm install && npm run build"
+          
           git push -f infomaniak main --no-verify
 
-          echo "✅ Push terminé ! Le script post-receive d'Infomaniak prend le relais."
-          echo "⚠️ Vérifiez les logs dans le Manager Infomaniak ou attendez quelques secondes que le site se mette à jour."
+          echo "✅ Code envoyé avec succès !"
