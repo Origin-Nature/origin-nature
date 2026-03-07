@@ -1,3 +1,22 @@
+name: Deploy to Infomaniak via Git Push
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      # 1. Récupérer le code source
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
 - name: Push Source Code to Infomaniak
         run: |
           # 1. Configuration Git de base
