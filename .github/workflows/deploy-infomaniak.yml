@@ -16,8 +16,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install sshpass and openssh-client
-        run: sudo apt-get update && sudo apt-get install -y sshpass openssh-client
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
 
       - name: Push Source Code to Infomaniak
         run: |
@@ -33,42 +33,46 @@ jobs:
           ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -q
           chmod 600 ~/.ssh/id_ed25519
           
-          # 2. Préparer la connexion
+          # Encoder la clé publique en Base64 (évite tous les problèmes de caractères spéciaux)
+          PUB_KEY_B64=$(base64 -w 0 ~/.ssh/id_ed25519.pub)
+          
+          # Variables
           SSH_USER="${{ secrets.SFTP_USERNAME }}"
           SSH_HOST="${{ secrets.SFTP_HOST }}"
           SSH_PASS="${{ secrets.SFTP_PASSWORD }}"
           
-          # 3. Déposer la clé publique MANUELLEMENT (Méthode robuste)
-          echo "📡 Dépôt de la clé publique..."
+          # 2. Déposer la clé publique (Méthode Base64 robuste)
+          echo "📡 Dépôt de la clé publique (via Base64)..."
           
-          # On crée le dossier .ssh distant via une commande simple
-          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+          # Une seule commande SSH exécutée avec sshpass
+          # Elle décode la clé et l'écrit dans authorized_keys
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$PUB_KEY_B64' | base64 -d >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
           
-          # On écrit la clé publique dans le fichier authorized_keys distant
-          # On utilise 'cat' depuis le local vers le distant via sshpass
-          sshpass -p "$SSH_PASS" cat ~/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+          EXIT_CODE=$?
           
-          if [ $? -ne 0 ]; then
-            echo "❌ Échec du dépôt de la clé."
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Échec critique lors du dépôt de la clé (Code: $EXIT_CODE)."
+            echo "Cela signifie que le compte SSH refuse l'exécution de commande distante."
+            echo "Solution de contournement : Il faut ajouter la clé manuellement dans le Manager Infomaniak."
             exit 1
           fi
-          echo "✅ Clé déposée."
+          echo "✅ Clé déposée avec succès."
           
-          # 4. Attente de synchronisation
+          # 3. Attente
           echo "⏳ Attente (5s)..."
           sleep 5
           
-          # 5. Test de connexion (CRUCIAL)
+          # 4. Test de connexion
           echo "🧪 Test de connexion par clé..."
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o BatchMode=yes "$SSH_USER@$SSH_HOST" "echo 'SUCCÈS'"
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o BatchMode=yes "$SSH_USER@$SSH_HOST" "echo 'CONNEXION RÉUSSIE'"
           
           if [ $? -ne 0 ]; then
-            echo "❌ Le test de connexion par clé a échoué."
-            echo "Le serveur refuse la clé. Vérifiez vos droits SSH chez Infomaniak."
+            echo "❌ Échec du test de connexion par clé."
             exit 1
           fi
           
-          # 6. Git Push
+          # 5. Git Push
           echo "🔄 Configuration Git..."
           git config --global core.sshCommand "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no"
           
