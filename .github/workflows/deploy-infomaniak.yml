@@ -1,48 +1,39 @@
-name: Deploy to Infomaniak via Git Push
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    
-    steps:
-      # 1. Récupérer le code source
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      # 2. Configurer Git et Pousser vers Infomaniak
-      - name: Push Source Code to Infomaniak
+- name: Push Source Code to Infomaniak
         run: |
-          # Configuration de l'utilisateur Git
+          # 1. Configuration Git de base
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions Deploy"
           
-          # CONFIGURATION CRUCIALE : Désactiver la vérification de l'hôte SSH
-          # Cela permet à GitHub de se connecter à Infomaniak sans demander de confirmation
-          git config --global core.sshCommand "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-
-          # Variables depuis les secrets
+          # 2. Générer une clé SSH temporaire
+          mkdir -p ~/.ssh
+          ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -C "github-actions"
+          chmod 600 ~/.ssh/id_ed25519
+          
+          # 3. Récupérer la clé publique générée
+          PUB_KEY=$(cat ~/.ssh/id_ed25519.pub)
+          
+          # 4. Se connecter UNE FOIS avec le mot de passe pour déposer la clé publique
+          # Cela configure l'accès sans mot de passe pour la suite
+          echo "🔑 Dépôt de la clé SSH sur Infomaniak..."
+          sshpass -p '${{ secrets.SFTP_PASSWORD }}' ssh -o StrictHostKeyChecking=no ${{ secrets.SFTP_USERNAME }}@${{ secrets.SFTP_HOST }} "
+            mkdir -p ~/.ssh && 
+            echo '$PUB_KEY' >> ~/.ssh/authorized_keys && 
+            chmod 700 ~/.ssh && 
+            chmod 600 ~/.ssh/authorized_keys
+          "
+          
+          # 5. Configurer Git pour utiliser cette clé
+          git config --global core.sshCommand "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no"
+          
+          # 6. Définir l'URL du dépôt (SANS mot de passe cette fois !)
           SSH_USER="${{ secrets.SFTP_USERNAME }}"
           SSH_HOST="${{ secrets.SFTP_HOST }}"
-          SSH_PASS="${{ secrets.SFTP_PASSWORD }}"
-          
-          # URL du dépôt distant
-          REMOTE_REPO="ssh://${SSH_USER}:${SSH_PASS}@${SSH_HOST}/home/${SSH_USER}/git-depot/monsite.git"
+          REMOTE_REPO="ssh://${SSH_USER}@${SSH_HOST}/home/${SSH_USER}/git-depot/originenature.git"
 
           echo "🔄 Ajout du remote Infomaniak..."
           git remote add infomaniak "$REMOTE_REPO"
 
-          echo "🚀 Envoi du CODE SOURCE vers Infomaniak..."
-          echo "🛠️ Le serveur Infomaniak va maintenant lancer : npm install && npm run build"
-          
-          # Le push se fera maintenant sans erreur de "Host key"
+          echo "🚀 Envoi du CODE SOURCE via Clé SSH..."
           git push -f infomaniak main --no-verify
 
-          echo "✅ Code envoyé avec succès !"
+          echo "✅ Code envoyé avec succès via clé SSH !"
