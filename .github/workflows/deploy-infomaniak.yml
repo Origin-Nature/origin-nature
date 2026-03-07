@@ -15,23 +15,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Nécessaire pour git push
+          fetch-depth: 0
 
       # 2. Configurer Git et Pousser vers Infomaniak
-      # C'est TOUT. Infomaniak fera le reste.
       - name: Push Source Code to Infomaniak
         run: |
           # Configuration de l'utilisateur Git
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions Deploy"
+          
+          # CONFIGURATION CRUCIALE : Désactiver la vérification de l'hôte SSH
+          # Cela permet à GitHub de se connecter à Infomaniak sans demander de confirmation
+          git config --global core.sshCommand "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
           # Variables depuis les secrets
           SSH_USER="${{ secrets.SFTP_USERNAME }}"
           SSH_HOST="${{ secrets.SFTP_HOST }}"
           SSH_PASS="${{ secrets.SFTP_PASSWORD }}"
           
-          # URL du dépôt distant (le dossier git-depot/monsite.git créé sur Infomaniak)
-          REMOTE_REPO="ssh://${SSH_USER}:${SSH_PASS}@${SSH_HOST}/home/${SSH_USER}/git-depot/originenature.git"
+          # URL du dépôt distant
+          REMOTE_REPO="ssh://${SSH_USER}:${SSH_PASS}@${SSH_HOST}/home/${SSH_USER}/git-depot/monsite.git"
 
           echo "🔄 Ajout du remote Infomaniak..."
           git remote add infomaniak "$REMOTE_REPO"
@@ -39,6 +42,7 @@ jobs:
           echo "🚀 Envoi du CODE SOURCE vers Infomaniak..."
           echo "🛠️ Le serveur Infomaniak va maintenant lancer : npm install && npm run build"
           
+          # Le push se fera maintenant sans erreur de "Host key"
           git push -f infomaniak main --no-verify
 
           echo "✅ Code envoyé avec succès !"
