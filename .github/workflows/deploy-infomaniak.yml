@@ -8,83 +8,74 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     
     steps:
-      # 1. Récupérer le code source
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2. Installation de sshpass
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
+      - name: Install sshpass and openssh-client
+        run: sudo apt-get update && sudo apt-get install -y sshpass openssh-client
 
-      # 3. Configuration, Dépôt de Clé et Push
       - name: Push Source Code to Infomaniak
         run: |
-          echo "🚀 DÉBUT DU DÉPLOIEMENT INFOMANIAK"
+          echo "🚀 DÉBUT DU DÉPLOIEMENT"
           
-          # --- CONFIGURATION GIT DE BASE ---
+          # Config Git
           git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions Deploy"
+          git config --global user.name "GitHub Actions"
           
-          # --- GÉNÉRATION DE LA CLÉ SSH ---
-          echo "🔑 1. Génération de la clé SSH éphémère..."
+          # 1. Générer la clé
+          echo "🔑 Génération de la clé..."
           mkdir -p ~/.ssh
-          ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -C "github-actions-deploy"
+          ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -q
           chmod 600 ~/.ssh/id_ed25519
-          PUB_KEY=$(cat ~/.ssh/id_ed25519.pub)
           
-          # --- DÉPÔT DE LA CLÉ SUR LE SERVEUR ---
-          echo "📡 2. Connexion et dépôt de la clé publique..."
-          export SSHPASS="${{ secrets.SFTP_PASSWORD }}"
+          # 2. Préparer la connexion
+          SSH_USER="${{ secrets.SFTP_USERNAME }}"
+          SSH_HOST="${{ secrets.SFTP_HOST }}"
+          SSH_PASS="${{ secrets.SFTP_PASSWORD }}"
           
-          # On exécute plusieurs commandes pour sécuriser au maximum les permissions
-          sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            ${{ secrets.SFTP_USERNAME }}@${{ secrets.SFTP_HOST }} "
-              rm -rf ~/.ssh/authorized_keys;
-              mkdir -p ~/.ssh;
-              chmod 700 ~/.ssh;
-              echo '$PUB_KEY' > ~/.ssh/authorized_keys;
-              chmod 600 ~/.ssh/authorized_keys;
-              chown -R \$USER:\$USER ~/.ssh;
-              echo 'Clé installée avec permissions 700/600';
-            "
+          # 3. Déposer la clé publique MANUELLEMENT (Méthode robuste)
+          echo "📡 Dépôt de la clé publique..."
+          
+          # On crée le dossier .ssh distant via une commande simple
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+          
+          # On écrit la clé publique dans le fichier authorized_keys distant
+          # On utilise 'cat' depuis le local vers le distant via sshpass
+          sshpass -p "$SSH_PASS" cat ~/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
           
           if [ $? -ne 0 ]; then
             echo "❌ Échec du dépôt de la clé."
             exit 1
           fi
+          echo "✅ Clé déposée."
           
-          # --- ATTENTE CRUCIALE ---
-          echo "⏳ 3. Attente de 5 secondes pour la synchronisation du serveur SSH..."
+          # 4. Attente de synchronisation
+          echo "⏳ Attente (5s)..."
           sleep 5
           
-          # --- TEST DE CONNEXION AVEC LA CLÉ ---
-          echo "🧪 4. Test de connexion avec la clé (sans mot de passe)..."
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -o BatchMode=yes \
-            ${{ secrets.SFTP_USERNAME }}@${{ secrets.SFTP_HOST }} "echo 'Connexion par clé réussie !'"
-            
+          # 5. Test de connexion (CRUCIAL)
+          echo "🧪 Test de connexion par clé..."
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o BatchMode=yes "$SSH_USER@$SSH_HOST" "echo 'SUCCÈS'"
+          
           if [ $? -ne 0 ]; then
-            echo "❌ Échec du test de connexion par clé. Le serveur refuse la clé."
-            echo "Vérifiez que votre compte SSH a le droit d'utiliser les clés (parfois désactivé sur les petits hébergements)."
+            echo "❌ Le test de connexion par clé a échoué."
+            echo "Le serveur refuse la clé. Vérifiez vos droits SSH chez Infomaniak."
             exit 1
           fi
           
-          # --- CONFIGURATION GIT ET PUSH ---
-          echo "🔄 5. Configuration du remote..."
-          git config --global core.sshCommand "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          # 6. Git Push
+          echo "🔄 Configuration Git..."
+          git config --global core.sshCommand "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no"
           
-          SSH_USER="${{ secrets.SFTP_USERNAME }}"
-          SSH_HOST="${{ secrets.SFTP_HOST }}"
           REMOTE_REPO="ssh://${SSH_USER}@${SSH_HOST}/home/${SSH_USER}/git-depot/originenature.git"
-          
           git remote add infomaniak "$REMOTE_REPO"
           
-          echo "🚀 6. Envoi du code (Git Push)..."
+          echo "🚀 Push en cours..."
           git push -f infomaniak main --no-verify
           
-          echo "✅ DÉPLOIEMENT TERMINÉ AVEC SUCCÈS !"
+          echo "✅ DÉPLOIEMENT RÉUSSI !"
