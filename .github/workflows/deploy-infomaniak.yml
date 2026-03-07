@@ -11,46 +11,70 @@ jobs:
     timeout-minutes: 10
     
     steps:
-      # 1. Récupérer le code source
+      # 1. Récupérer le code source (avec tout l'historique)
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-- name: Push Source Code to Infomaniak
+      # 2. Installation de sshpass (nécessaire pour l'étape d'initialisation de la clé)
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      # 3. Configuration Git, Génération de Clé SSH et Déploiement
+      - name: Push Source Code to Infomaniak
         run: |
-          # 1. Configuration Git de base
+          # --- CONFIGURATION GIT DE BASE ---
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions Deploy"
           
-          # 2. Générer une clé SSH temporaire
+          # --- GÉNÉRATION D'UNE CLÉ SSH TEMPORAIRE ---
+          echo "🔑 Génération d'une clé SSH éphémère..."
           mkdir -p ~/.ssh
-          ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -C "github-actions"
+          ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -C "github-actions-deploy"
           chmod 600 ~/.ssh/id_ed25519
           
-          # 3. Récupérer la clé publique générée
+          # Récupération de la clé publique
           PUB_KEY=$(cat ~/.ssh/id_ed25519.pub)
           
-          # 4. Se connecter UNE FOIS avec le mot de passe pour déposer la clé publique
-          echo "🔑 Dépôt de la clé SSH sur Infomaniak..."
+          # --- DÉPÔT DE LA CLÉ SUR INFOMANIAK (Via mot de passe) ---
+          echo "📡 Connexion initiale pour déposer la clé publique..."
           
-          # Utilisation de la variable d'environnement pour éviter les problèmes de quotes dans YAML
+          # On utilise SSHPASS via variable d'environnement pour éviter les problèmes de caractères spéciaux
           export SSHPASS="${{ secrets.SFTP_PASSWORD }}"
           
-          sshpass -e ssh -o StrictHostKeyChecking=no ${{ secrets.SFTP_USERNAME }}@${{ secrets.SFTP_HOST }} "mkdir -p ~/.ssh && echo '${PUB_KEY}' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys"
+          # Commande distante : crée .ssh, ajoute la clé, fixe les permissions
+          sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            ${{ secrets.SFTP_USERNAME }}@${{ secrets.SFTP_HOST }} "
+              mkdir -p ~/.ssh && 
+              echo '$PUB_KEY' >> ~/.ssh/authorized_keys && 
+              chmod 700 ~/.ssh && 
+              chmod 600 ~/.ssh/authorized_keys
+            "
           
-          # 5. Configurer Git pour utiliser cette clé
-          git config --global core.sshCommand "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no"
+          if [ $? -ne 0 ]; then
+            echo "❌ Échec du dépôt de la clé SSH. Vérifiez vos identifiants."
+            exit 1
+          fi
+          echo "✅ Clé SSH déposée avec succès."
           
-          # 6. Définir l'URL du dépôt (SANS mot de passe cette fois !)
+          # --- CONFIGURATION DE GIT POUR UTILISER LA CLÉ PRIVÉE ---
+          git config --global core.sshCommand "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          
+          # --- DÉFINITION DU DÉPÔT DISTANT (SANS MOT DE PASSE) ---
           SSH_USER="${{ secrets.SFTP_USERNAME }}"
           SSH_HOST="${{ secrets.SFTP_HOST }}"
+          # URL propre sans mot de passe, utilisant désormais la clé
           REMOTE_REPO="ssh://${SSH_USER}@${SSH_HOST}/home/${SSH_USER}/git-depot/originenature.git"
 
           echo "🔄 Ajout du remote Infomaniak..."
           git remote add infomaniak "$REMOTE_REPO"
 
-          echo "🚀 Envoi du CODE SOURCE via Clé SSH..."
+          # --- ENVOI DU CODE (PUSH) ---
+          echo "🚀 Envoi du CODE SOURCE vers Infomaniak..."
+          echo "🛠️ Le serveur va lancer : npm install && npm run build"
+          
           git push -f infomaniak main --no-verify
 
-          echo "✅ Code envoyé avec succès via clé SSH !"
+          echo "✅ Déploiement lancé avec succès !"
+          echo "⚠️ Surveillez votre site, le build peut prendre 2-5 minutes."
