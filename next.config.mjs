@@ -1,6 +1,45 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    return [
+      {
+        source: '/post/:slug',
+        destination: '/',
+        permanent: true,
+      },
+      {
+        source: '/about',
+        destination: '/',
+        permanent: false,
+      },
+      {
+        source: '/about/:slug',
+        destination: '/',
+        permanent: false,
+      },
+      {
+        source: '/brands',
+        destination: '/',
+        permanent: false,
+      },
+      {
+        source: '/brands/:slug',
+        destination: '/?brand=:slug',
+        permanent: false,
+      },
+      {
+        source: '/materials',
+        destination: '/',
+        permanent: false,
+      },
+      {
+        source: '/materials/:slug',
+        destination: '/?material=:slug',
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
