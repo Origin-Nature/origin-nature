@@ -1,6 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Performance optimizations
+  poweredByHeader: false,
+  compress: true,
+  // Optimize images from Plasmic CDN
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.plasmic.app',
+      },
+      {
+        protocol: 'https',
+        hostname: 'img.plasmic.app',
+      },
+    ],
+  },
   async redirects() {
     return [
       {

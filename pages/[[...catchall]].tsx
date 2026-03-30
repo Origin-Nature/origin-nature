@@ -67,6 +67,8 @@ export const getStaticPaths: GetStaticPaths = async () => {
         catchall: mod.path.substring(1).split("/"),
       },
     })),
-    fallback: "blocking",
+    // Changed from "blocking" to false to prevent on-demand ISR writes
+    // All pages are pre-rendered at build time, unknown URLs return 404
+    fallback: false,
   };
 }
