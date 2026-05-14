@@ -4,24 +4,24 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: '/:path((?!en|fr).*)',
-        destination: '/en',
+        source: "/:path((?!en).*)",
+        destination: "/en",
         permanent: true,
         has: [
           {
-            type: 'host',
-            value: 'origin-nature\\.com',
+            type: "host",
+            value: "origin-nature.com",
           },
         ],
       },
       {
-        source: '/:path((?!en|fr).*)',
-        destination: '/fr',
+        source: "/:path((?!fr).*)",
+        destination: "/fr",
         permanent: true,
         has: [
           {
-            type: 'host',
-            value: 'origine-nature\\.com',
+            type: "host",
+            value: "origine-nature.com",
           },
         ],
       },
