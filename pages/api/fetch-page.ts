@@ -24,7 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET");
     return res.status(200).json({ html });
-  } catch (err) {
+    } catch (err) {
+    console.error("Échec du fetch :", err);
     return res.status(500).json({ error: "Échec de la récupération" });
   }
 }
